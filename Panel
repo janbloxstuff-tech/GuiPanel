@@ -1,0 +1,786 @@
+-- ==========================================
+-- PART 1: CUSTOM UTILITY PANEL (UI CONTROLLER)
+-- ==========================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TeamsService = game:GetService("Teams")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Global state configuration (Defaults)
+_G.ESP_Enabled = false
+_G.TeamCheck_Enabled = false
+_G.ShowNames_Enabled = false
+_G.ShowHealth_Enabled = false
+_G.EnemyHealth_Enabled = false
+
+_G.WalkSpeed_Value = 16
+_G.JumpPower_Value = 50
+_G.Fly_Enabled = false
+_G.Fly_Speed = 50
+
+_G.Hitbox_Enabled = false
+_G.Hitbox_Size = 2
+_G.CheckForcefield_Enabled = false
+_G.Hitbox_Target = "Both" 
+_G.Hitbox_Transparency = 0.5 
+
+_G.ESP_Color = Color3.fromRGB(255, 0, 0)
+local ColorIndex = 1
+local ColorsList = {
+	{Name = "Red", Color = Color3.fromRGB(255, 0, 0)},
+	{Name = "Green", Color = Color3.fromRGB(0, 255, 0)},
+	{Name = "Blue", Color = Color3.fromRGB(0, 100, 255)},
+	{Name = "Yellow", Color = Color3.fromRGB(255, 255, 0)},
+	{Name = "Purple", Color = Color3.fromRGB(170, 0, 255)}
+}
+
+-- Frame Color Themes
+local CurrentThemeIndex = 1
+local FrameThemes = {
+	{Name = "Dark Grey", Primary = Color3.fromRGB(25, 25, 25), Secondary = Color3.fromRGB(35, 35, 35)},
+	{Name = "Crimson", Primary = Color3.fromRGB(35, 15, 15), Secondary = Color3.fromRGB(55, 20, 20)},
+	{Name = "Midnight", Primary = Color3.fromRGB(15, 15, 30), Secondary = Color3.fromRGB(20, 20, 45)},
+	{Name = "Forest", Primary = Color3.fromRGB(15, 30, 15), Secondary = Color3.fromRGB(20, 45, 20)}
+}
+
+-- --- GUI CREATION ---
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CustomESPMenu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 9999999
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Toggle Button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 120, 0, 40)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+ToggleButton.BackgroundColor3 = FrameThemes[1].Secondary
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 14
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "Toggle Menu (O)"
+ToggleButton.BorderSizePixel = 0
+ToggleButton.ZIndex = 10
+ToggleButton.Parent = ScreenGui
+
+local UICornerBtn = Instance.new("UICorner")
+UICornerBtn.CornerRadius = UDim.new(0, 6)
+UICornerBtn.Parent = ToggleButton
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 290, 0, 450)
+MainFrame.Position = UDim2.new(0.5, -145, 0.5, -225)
+MainFrame.BackgroundColor3 = FrameThemes[1].Primary
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = false
+MainFrame.Visible = true
+MainFrame.ZIndex = 5
+MainFrame.Parent = ScreenGui
+
+local UICornerMain = Instance.new("UICorner")
+UICornerMain.CornerRadius = UDim.new(0, 8)
+UICornerMain.Parent = MainFrame
+
+-- Title Bar (Dragging handle)
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, 0, 0, 40)
+TitleLabel.BackgroundColor3 = FrameThemes[1].Secondary
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 16
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.Text = "   ESP & UTILITY PANEL"
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.BorderSizePixel = 0
+TitleLabel.ZIndex = 6
+TitleLabel.Active = true
+TitleLabel.Parent = MainFrame
+
+local UICornerTitle = Instance.new("UICorner")
+UICornerTitle.CornerRadius = UDim.new(0, 8)
+UICornerTitle.Parent = TitleLabel
+
+-- Scrolling Frame for Settings
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1, -20, 1, -60)
+ScrollFrame.Position = UDim2.new(0, 10, 0, 45)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.BorderSizePixel = 0
+ScrollFrame.ScrollBarThickness = 6
+ScrollFrame.ZIndex = 6
+ScrollFrame.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Parent = ScrollFrame
+
+-- Auto Scroll Fix
+UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 15)
+end)
+
+-- --- RESIZE HANDLE ---
+local ResizeHandle = Instance.new("ImageButton")
+ResizeHandle.Size = UDim2.new(0, 16, 0, 16)
+ResizeHandle.Position = UDim2.new(1, -16, 1, -16)
+ResizeHandle.BackgroundTransparency = 1
+ResizeHandle.Image = "rbxassetid://6031094067"
+ResizeHandle.ImageColor3 = Color3.fromRGB(150, 150, 150)
+ResizeHandle.ZIndex = 8
+ResizeHandle.Parent = MainFrame
+
+-- --- DRAGGABLE FRAME LOGIC ---
+local dragging, dragInput, dragStart, startPos
+local function updateDrag(input)
+	local delta = input.Position - dragStart
+	MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+TitleLabel.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = MainFrame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+TitleLabel.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		updateDrag(input)
+	end
+end)
+
+-- --- RESIZING LOGIC ---
+local resizing = false
+local resizeStartPos = nil
+local resizeStartSize = nil
+
+ResizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = true
+		resizeStartPos = input.Position
+		resizeStartSize = MainFrame.Size
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				resizing = false
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - resizeStartPos
+		local newWidth = math.clamp(resizeStartSize.X.Offset + delta.X, 220, 600)
+		local newHeight = math.clamp(resizeStartSize.Y.Offset + delta.Y, 250, 800)
+		MainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+	end
+end)
+
+-- --- HELPER BUILDERS ---
+local function createSectionHeader(text, layoutOrder)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -10, 0, 25)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(150, 150, 150)
+	label.TextSize = 11
+	label.Font = Enum.Font.SourceSansBold
+	label.Text = text
+	label.LayoutOrder = layoutOrder
+	label.BorderSizePixel = 0
+	label.ZIndex = 6
+	label.Parent = ScrollFrame
+	return label
+end
+
+local function createMenuButton(text, layoutOrder)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -10, 0, 35)
+	btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btn.TextSize = 13
+	btn.Font = Enum.Font.SourceSansBold
+	btn.Text = text
+	btn.LayoutOrder = layoutOrder
+	btn.BorderSizePixel = 0
+	btn.ZIndex = 6
+	btn.Parent = ScrollFrame
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = btn
+	
+	return btn
+end
+
+local function createSlider(textPrefix, minVal, maxVal, defaultVal, layoutOrder, callback)
+	local container = Instance.new("Frame")
+	container.Size = UDim2.new(1, -10, 0, 45)
+	container.BackgroundTransparency = 1
+	container.LayoutOrder = layoutOrder
+	container.ZIndex = 6
+	container.Parent = ScrollFrame
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 15)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(200, 200, 200)
+	label.TextSize = 11
+	label.Font = Enum.Font.SourceSansBold
+	label.Text = textPrefix .. ": " .. tostring(defaultVal)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 6
+	label.Parent = container
+
+	local sliderBg = Instance.new("Frame")
+	sliderBg.Size = UDim2.new(1, 0, 0, 8)
+	sliderBg.Position = UDim2.new(0, 0, 0.5, 5)
+	sliderBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	sliderBg.BorderSizePixel = 0
+	sliderBg.ZIndex = 6
+	sliderBg.Parent = container
+
+	local sliderCorner = Instance.new("UICorner")
+	sliderCorner.CornerRadius = UDim.new(1, 0)
+	sliderCorner.Parent = sliderBg
+
+	local sliderFill = Instance.new("Frame")
+	sliderFill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
+	sliderFill.BackgroundColor3 = Color3.fromRGB(60, 120, 60)
+	sliderFill.BorderSizePixel = 0
+	sliderFill.ZIndex = 6
+	sliderFill.Parent = sliderBg
+
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(1, 0)
+	fillCorner.Parent = sliderFill
+
+	local triggerBtn = Instance.new("TextButton")
+	triggerBtn.Size = UDim2.new(1, 0, 1, 0)
+	triggerBtn.BackgroundTransparency = 1
+	triggerBtn.Text = ""
+	triggerBtn.ZIndex = 7
+	triggerBtn.Parent = sliderBg
+
+	local function updateSlider(input)
+		local ratio = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+		sliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+		local exactValue = math.round(minVal + (ratio * (maxVal - minVal)))
+		label.Text = textPrefix .. ": " .. tostring(exactValue)
+		callback(exactValue)
+	end
+
+	local isSliding = false
+	triggerBtn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			isSliding = true
+			updateSlider(input)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if isSliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			updateSlider(input)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			isSliding = false
+		end
+	end)
+end
+
+-- --- BUILD CONFIGURATION STRUCTURE ---
+
+createSectionHeader("--- ESP CONFIGURATION ---", 1)
+local Btn_ESP = createMenuButton("ESP: OFF", 2)
+local Btn_Color = createMenuButton("Color: Red", 3)
+local Btn_Team = createMenuButton("Team Check: OFF", 4)
+local Btn_Names = createMenuButton("Show Names: OFF", 5)
+local Btn_EnemyHealth = createMenuButton("Show Enemy Health: OFF", 6)
+
+createSectionHeader("--- PLAYER CONFIGURATION ---", 7)
+local Btn_Health = createMenuButton("Show My Health: OFF", 8)
+local Btn_Fly = createMenuButton("Fly: OFF", 9)
+
+createSlider("WalkSpeed", 16, 250, 16, 10, function(val)
+	_G.WalkSpeed_Value = val
+end)
+
+createSlider("JumpPower", 50, 500, 50, 11, function(val)
+	_G.JumpPower_Value = val
+end)
+
+createSlider("Fly Speed", 10, 200, 50, 12, function(val)
+	_G.Fly_Speed = val
+end)
+
+createSectionHeader("--- HITBOX CONFIGURATION ---", 13)
+local Btn_Hitbox = createMenuButton("Hitbox Expander: OFF", 14)
+local Btn_HitboxTarget = createMenuButton("Target: Both", 15)
+local Btn_HitboxTrans = createMenuButton("Transparency: 50%", 16)
+local Btn_Forcefield = createMenuButton("Check Forcefield: OFF", 17)
+
+createSlider("Hitbox Size", 2, 150, 2, 18, function(val)
+	_G.Hitbox_Size = val
+end)
+
+createSectionHeader("--- FRAME CONFIGURATION ---", 19)
+local Btn_Theme = createMenuButton("UI Theme: Dark Grey", 20)
+
+-- Self Health Display Setup
+local SelfHealthGui = Instance.new("ScreenGui")
+SelfHealthGui.Name = "SelfHealthDisplay"
+SelfHealthGui.ResetOnSpawn = false
+SelfHealthGui.DisplayOrder = 10000000
+SelfHealthGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local SelfHealthLabel = Instance.new("TextLabel")
+SelfHealthLabel.Size = UDim2.new(0, 180, 0, 35)
+SelfHealthLabel.Position = UDim2.new(0.5, -90, 0.85, 0)
+SelfHealthLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+SelfHealthLabel.BackgroundTransparency = 0.4
+SelfHealthLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+SelfHealthLabel.TextSize = 16
+SelfHealthLabel.Font = Enum.Font.SourceSansBold
+SelfHealthLabel.Text = "Your Health: 100/100"
+SelfHealthLabel.Visible = false
+SelfHealthLabel.ZIndex = 5
+SelfHealthLabel.Parent = SelfHealthGui
+local UICornerSH = Instance.new("UICorner")
+UICornerSH.CornerRadius = UDim.new(0, 6)
+UICornerSH.Parent = SelfHealthLabel
+
+-- --- BUTTON TOGGLE ACTIONS ---
+
+local function updateButtonVisual(btn, state, textPrefix)
+	if state then
+		btn.BackgroundColor3 = Color3.fromRGB(60, 120, 60)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Text = textPrefix .. ": ON"
+	else
+		btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+		btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+		btn.Text = textPrefix .. ": OFF"
+	end
+end
+
+Btn_ESP.MouseButton1Click:Connect(function()
+	_G.ESP_Enabled = not _G.ESP_Enabled
+	updateButtonVisual(Btn_ESP, _G.ESP_Enabled, "ESP")
+end)
+
+Btn_Color.MouseButton1Click:Connect(function()
+	ColorIndex = ColorIndex + 1
+	if ColorIndex > #ColorsList then ColorIndex = 1 end
+	_G.ESP_Color = ColorsList[ColorIndex].Color
+	Btn_Color.Text = "Color: " .. ColorsList[ColorIndex].Name
+	Btn_Color.TextColor3 = _G.ESP_Color
+end)
+
+Btn_Team.MouseButton1Click:Connect(function()
+	local actualTeamsExist = #TeamsService:GetTeams() > 1
+	if not actualTeamsExist then
+		Btn_Team.Text = "No Teams Found!"
+		task.wait(1)
+		updateButtonVisual(Btn_Team, _G.TeamCheck_Enabled, "Team Check")
+		return
+	end
+	_G.TeamCheck_Enabled = not _G.TeamCheck_Enabled
+	updateButtonVisual(Btn_Team, _G.TeamCheck_Enabled, "Team Check")
+end)
+
+Btn_Names.MouseButton1Click:Connect(function()
+	_G.ShowNames_Enabled = not _G.ShowNames_Enabled
+	updateButtonVisual(Btn_Names, _G.ShowNames_Enabled, "Show Names")
+end)
+
+Btn_EnemyHealth.MouseButton1Click:Connect(function()
+	_G.EnemyHealth_Enabled = not _G.EnemyHealth_Enabled
+	updateButtonVisual(Btn_EnemyHealth, _G.EnemyHealth_Enabled, "Show Enemy Health")
+end)
+
+Btn_Health.MouseButton1Click:Connect(function()
+	_G.ShowHealth_Enabled = not _G.ShowHealth_Enabled
+	updateButtonVisual(Btn_Health, _G.ShowHealth_Enabled, "Show My Health")
+	SelfHealthLabel.Visible = _G.ShowHealth_Enabled
+end)
+
+Btn_Hitbox.MouseButton1Click:Connect(function()
+	_G.Hitbox_Enabled = not _G.Hitbox_Enabled
+	updateButtonVisual(Btn_Hitbox, _G.Hitbox_Enabled, "Hitbox Expander")
+end)
+
+local targets = {"Both", "HumanoidRootPart", "Head"}
+local currentTargetIndex = 1
+Btn_HitboxTarget.MouseButton1Click:Connect(function()
+	currentTargetIndex = currentTargetIndex + 1
+	if currentTargetIndex > #targets then currentTargetIndex = 1 end
+	_G.Hitbox_Target = targets[currentTargetIndex]
+	Btn_HitboxTarget.Text = "Target: " .. _G.Hitbox_Target
+end)
+
+local transparencies = {0, 0.5, 0.8, 1}
+local currentTransIndex = 2
+Btn_HitboxTrans.MouseButton1Click:Connect(function()
+	currentTransIndex = currentTransIndex + 1
+	if currentTransIndex > #transparencies then currentTransIndex = 1 end
+	_G.Hitbox_Transparency = transparencies[currentTransIndex]
+	Btn_HitboxTrans.Text = "Transparency: " .. tostring(_G.Hitbox_Transparency * 100) .. "%"
+end)
+
+Btn_Forcefield.MouseButton1Click:Connect(function()
+	_G.CheckForcefield_Enabled = not _G.CheckForcefield_Enabled
+	updateButtonVisual(Btn_Forcefield, _G.CheckForcefield_Enabled, "Check Forcefield")
+end)
+
+Btn_Theme.MouseButton1Click:Connect(function()
+	CurrentThemeIndex = CurrentThemeIndex + 1
+	if CurrentThemeIndex > #FrameThemes then CurrentThemeIndex = 1 end
+	local theme = FrameThemes[CurrentThemeIndex]
+	
+	Btn_Theme.Text = "UI Theme: " .. theme.Name
+	MainFrame.BackgroundColor3 = theme.Primary
+	TitleLabel.BackgroundColor3 = theme.Secondary
+	ToggleButton.BackgroundColor3 = theme.Secondary
+end)
+
+ToggleButton.MouseButton1Click:Connect(function()
+	MainFrame.Visible = not MainFrame.Visible
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.O then
+		MainFrame.Visible = not MainFrame.Visible
+	end
+end)
+
+-- Pass variables out to Part 2 via _G variables
+_G.Btn_Fly = Btn_Fly
+_G.SelfHealthLabel = SelfHealthLabel
+_G.updateButtonVisualFunc = updateButtonVisual
+-- ==========================================
+-- PART 2: ENGINE & GAME MANIPULATION CORE
+-- ==========================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TeamsService = game:GetService("Teams")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Retrieve variables declared in Part 1
+local Btn_Fly = _G.Btn_Fly
+local SelfHealthLabel = _G.SelfHealthLabel
+local updateButtonVisual = _G.updateButtonVisualFunc
+
+local Fly_BodyVelocity = nil
+local Fly_BodyGyro = nil
+
+-- --- FLIGHT CONTROLS ---
+local function stopFlying()
+	_G.Fly_Enabled = false
+	if updateButtonVisual and Btn_Fly then updateButtonVisual(Btn_Fly, false, "Fly") end
+	if Fly_BodyVelocity then Fly_BodyVelocity:Destroy() Fly_BodyVelocity = nil end
+	if Fly_BodyGyro then Fly_BodyGyro:Destroy() Fly_BodyGyro = nil end
+	if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+		LocalPlayer.Character:FindFirstChildOfClass("Humanoid").PlatformStand = false
+	end
+end
+
+local function startFlying()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	
+	if not hrp or not hum then return end
+	
+	_G.Fly_Enabled = true
+	if updateButtonVisual and Btn_Fly then updateButtonVisual(Btn_Fly, true, "Fly") end
+	
+	hum.PlatformStand = true
+
+	Fly_BodyGyro = Instance.new("BodyGyro")
+	Fly_BodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+	Fly_BodyGyro.cframe = hrp.CFrame
+	Fly_BodyGyro.Parent = hrp
+
+	Fly_BodyVelocity = Instance.new("BodyVelocity")
+	Fly_BodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+	Fly_BodyVelocity.velocity = Vector3.zero
+	Fly_BodyVelocity.Parent = hrp
+end
+
+if Btn_Fly then
+	Btn_Fly.MouseButton1Click:Connect(function()
+		if _G.Fly_Enabled then
+			stopFlying()
+		else
+			startFlying()
+		end
+	end)
+end
+
+-- --- ESP SYSTEM ENGINE ---
+local Storage = {}
+
+local function clearESP(player)
+	if Storage[player] then
+		if Storage[player].Highlight then Storage[player].Highlight:Destroy() end
+		if Storage[player].Billboard then Storage[player].Billboard:Destroy() end
+		Storage[player] = nil
+	end
+end
+
+local function setupESP(player, character)
+	task.wait(0.1)
+	if not _G.ESP_Enabled or not character:Parent() then return end
+	
+	local hrp = character:WaitForChild("HumanoidRootPart", 5)
+	local hum = character:WaitForChild("Humanoid", 5)
+	
+	if hrp and hum then
+		if not Storage[player] then
+			Storage[player] = {}
+		end
+		
+		-- Highlight Engine
+		if not Storage[player].Highlight or not Storage[player].Highlight.Parent then
+			local hl = Instance.new("Highlight")
+			hl.FillTransparency = 0.6
+			hl.OutlineTransparency = 0
+			hl.Parent = character
+			Storage[player].Highlight = hl
+		end
+		Storage[player].Highlight.FillColor = _G.ESP_Color
+		Storage[player].Highlight.OutlineColor = _G.ESP_Color
+		
+		-- Names & Health Billboard Engine
+		if _G.ShowNames_Enabled or _G.EnemyHealth_Enabled then
+			if not Storage[player].Billboard or not Storage[player].Billboard.Parent then
+				local bb = Instance.new("BillboardGui")
+				bb.Size = UDim2.new(0, 200, 0, 50)
+				bb.AlwaysOnTop = true
+				bb.ExtentsOffset = Vector3.new(0, 3.5, 0)
+				
+				local tl = Instance.new("TextLabel")
+				tl.Size = UDim2.new(1, 0, 1, 0)
+				tl.BackgroundTransparency = 1
+				tl.Font = Enum.Font.SourceSansBold
+				tl.TextSize = 14
+				tl.TextStrokeTransparency = 0
+				tl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+				tl.Parent = bb
+				
+				bb.Parent = hrp
+				Storage[player].Billboard = bb
+			end
+			
+			local text = ""
+			if _G.ShowNames_Enabled then text = text .. player.Name end
+			if _G.EnemyHealth_Enabled then 
+				text = text .. string.format("\n[HP: %.0f/%.0f]", hum.Health, hum.MaxHealth)
+			end
+			Storage[player].Billboard.TextLabel.Text = text
+			Storage[player].Billboard.TextLabel.TextColor3 = _G.ESP_Color
+		else
+			if Storage[player].Billboard then
+				Storage[player].Billboard:Destroy()
+				Storage[player].Billboard = nil
+			end
+		end
+	end
+end
+
+local function managePlayer(player)
+	if player == LocalPlayer then return end
+	
+	player.CharacterAdded:Connect(function(character)
+		if _G.ESP_Enabled then
+			setupESP(player, character)
+		end
+	end)
+	
+	player.CharacterRemoving:Connect(function()
+		clearESP(player)
+	end)
+	
+	if player.Character then
+		task.spawn(setupESP, player, player.Character)
+	end
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	managePlayer(player)
+end
+
+Players.PlayerAdded:Connect(managePlayer)
+Players.PlayerRemoving:Connect(function(player)
+	clearESP(player)
+end)
+
+-- --- CENTRAL RUNTIME RENDERING LOOP ---
+RunService.RenderStepped:Connect(function()
+	-- Local Player speed/jump updates
+	if LocalPlayer.Character then
+		local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then
+			if hum.WalkSpeed ~= _G.WalkSpeed_Value then hum.WalkSpeed = _G.WalkSpeed_Value end
+			if hum.JumpPower ~= _G.JumpPower_Value then 
+				hum.UseJumpPower = true
+				hum.JumpPower = _G.JumpPower_Value 
+			end
+		end
+	end
+
+	-- Joystick & WASD Native Flight
+	if _G.Fly_Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+		local hrp = LocalPlayer.Character.HumanoidRootPart
+		local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.PlatformStand = true end
+
+		-- Directly fetch the direction vector outputted by native controls (joystick/WASD keys)
+		local nativeDirection = hum and hum.MoveDirection or Vector3.zero
+
+		if Fly_BodyVelocity and Fly_BodyGyro then
+			Fly_BodyGyro.cframe = Camera.CFrame
+			
+			if nativeDirection.Magnitude > 0 then
+				-- Map Joystick coordinate direction relative to Camera look angles
+				local flyDir = Camera.CFrame:VectorToWorldSpace(Vector3.new(nativeDirection.X, 0, nativeDirection.Z))
+				Fly_BodyVelocity.velocity = flyDir.Unit * _G.Fly_Speed
+			else
+				Fly_BodyVelocity.velocity = Vector3.zero
+			end
+		end
+	end
+
+	-- Screen health update
+	if _G.ShowHealth_Enabled and SelfHealthLabel and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+		local myHumanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		SelfHealthLabel.Text = string.format("Your Health: %.0f / %.0f", myHumanoid.Health, myHumanoid.MaxHealth)
+		
+		if myHumanoid.Health > (myHumanoid.MaxHealth * 0.5) then
+			SelfHealthLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+		elseif myHumanoid.Health > (myHumanoid.MaxHealth * 0.25) then
+			SelfHealthLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
+		else
+			SelfHealthLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+		end
+	end
+
+	-- Handle other players (ESP + Independent Hitbox Setup)
+	for _, v in ipairs(Players:GetPlayers()) do
+		if v == LocalPlayer then continue end
+		
+		local character = v.Character
+		if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChildOfClass("Humanoid") then
+			local hrp = character.HumanoidRootPart
+			local head = character:FindFirstChild("Head")
+			local hum = character:FindFirstChildOfClass("Humanoid")
+			
+			local isDead = (hum.Health <= 0)
+			local hasForcefield = character:FindFirstChildOfClass("ForceField") ~= nil
+
+			-- TEAM CHECKS & FORCEFIELD CHECKS (ONLY APPLIED TO ESP)
+			local actualTeamsExist = #TeamsService:GetTeams() > 1
+			local passesESPFilter = true
+
+			if _G.CheckForcefield_Enabled and hasForcefield then
+				passesESPFilter = false
+			end
+			if _G.TeamCheck_Enabled and actualTeamsExist and v.Team == LocalPlayer.Team then
+				passesESPFilter = false
+			end
+
+			-- Render active ESP
+			if _G.ESP_Enabled and passesESPFilter and not isDead then
+				if not Storage[v] then
+					setupESP(v, character)
+				else
+					if Storage[v].Highlight then
+						Storage[v].Highlight.FillColor = _G.ESP_Color
+						Storage[v].Highlight.OutlineColor = _G.ESP_Color
+					end
+					if _G.ShowNames_Enabled or _G.EnemyHealth_Enabled then
+						if not Storage[v].Billboard then
+							setupESP(v, character)
+						else
+							local text = ""
+							if _G.ShowNames_Enabled then text = text .. v.Name end
+							if _G.EnemyHealth_Enabled then 
+								text = text .. string.format("\n[HP: %.0f/%.0f]", hum.Health, hum.MaxHealth)
+							end
+							Storage[v].Billboard.TextLabel.Text = text
+							Storage[v].Billboard.TextLabel.TextColor3 = _G.ESP_Color
+						end
+					else
+						if Storage[v].Billboard then
+							Storage[v].Billboard:Destroy()
+							Storage[v].Billboard = nil
+						end
+					end
+				end
+			else
+				clearESP(v)
+			end
+
+			-- HITBOX RUNTIME (Completely Independent from ESP / Team checks)
+			if _G.Hitbox_Enabled and not isDead then
+				if _G.Hitbox_Target == "Head" or _G.Hitbox_Target == "Both" then
+					if head then
+						head.Size = Vector3.new(_G.Hitbox_Size, _G.Hitbox_Size, _G.Hitbox_Size)
+						head.CanCollide = false
+						head.Transparency = _G.Hitbox_Transparency
+					end
+				else
+					if head then head.Size = Vector3.new(2, 1, 1) head.CanCollide = true head.Transparency = 0 end
+				end
+
+				if _G.Hitbox_Target == "HumanoidRootPart" or _G.Hitbox_Target == "Both" then
+					if hrp then
+						hrp.Size = Vector3.new(_G.Hitbox_Size, _G.Hitbox_Size, _G.Hitbox_Size)
+						hrp.CanCollide = false
+						hrp.Transparency = _G.Hitbox_Transparency
+					end
+				else
+					if hrp then hrp.Size = Vector3.new(2, 2, 1) hrp.CanCollide = true hrp.Transparency = 1 end
+				end
+			else
+				-- Reset back to standard dimensions when disabled or when the player dies
+				if head then
+					head.Size = Vector3.new(2, 1, 1)
+					head.CanCollide = true
+					head.Transparency = 0
+				end
+				if hrp then
+					hrp.Size = Vector3.new(2, 2, 1)
+					hrp.CanCollide = true
+					hrp.Transparency = 1
+				end
+			end
+		else
+			clearESP(v)
+		end
+	end
+end)
+
